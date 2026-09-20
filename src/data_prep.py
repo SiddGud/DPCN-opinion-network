@@ -104,3 +104,24 @@ def prepare():
     flags = quality_flags(raw[keep], clean)
     report["n_flagged"] = int(flags["flagged"].sum())
     return raw, clean, texts, flags, report
+
+
+def run_stage(ctx):
+    """Stage 1 (Vedant): clean the data, flag careless answers, draw Figs. 1 and 3."""
+    import config as C
+    import plots_data as PD
+    from themes import question_summary
+    raw, data, texts, flags, prep = prepare()
+    flags.to_csv(C.TABLE_DIR / "quality_flags.csv")
+    PD.diverging_bars(data)
+    PD.missingness(encode(raw), raw)
+    qsum = question_summary(data)
+    qsum["text"] = pd.Series(texts)
+    qsum.sort_values("polarization", ascending=False).to_csv(C.TABLE_DIR / "question_summary.csv")
+    ctx["raw"] = raw
+    ctx["data"] = data
+    ctx["texts"] = texts
+    ctx["flags"] = flags
+    ctx["qsum"] = qsum
+    ctx["results"]["data"] = prep
+    print("Data:", prep)

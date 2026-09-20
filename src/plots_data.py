@@ -1,11 +1,14 @@
-"""Figures for the raw answers and missing data. Owner: Vedant."""
+"""Figures for the raw answers, missing data and theme networks. Owner: Vedant."""
 import numpy as np
+import pandas as pd
+import networkx as nx
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import seaborn as sns
 
-from config import THEMES
-from plot_utils import LIKERT_ORDER, LIKERT_COLORS, save
+from config import FIG_DIR, THEMES
+from plot_utils import PALETTE, LIKERT_ORDER, LIKERT_COLORS, save
 
 
 def diverging_bars(data):
@@ -61,3 +64,22 @@ def missingness(raw_numeric, raw):
     axes[1].set_title("Answers given per respondent")
     axes[1].legend(fontsize=8)
     save(fig, "fig2_missingness.png")
+
+
+def theme_panel(theme_graphs, theme_labels, nmi):
+    """Four theme networks + NMI agreement between their partitions."""
+    fig = plt.figure(figsize=(13, 7))
+    for i, (name, g) in enumerate(theme_graphs.items()):
+        ax = fig.add_subplot(2, 3, [1, 2, 4, 5][i])
+        pos = nx.spring_layout(g, weight="weight", seed=7, k=0.35)
+        colors = []
+        for n in g.nodes():
+            colors.append(PALETTE[theme_labels[name][n] % len(PALETTE)])
+        nx.draw_networkx_edges(g, pos, ax=ax, alpha=0.2, width=0.5)
+        nx.draw_networkx_nodes(g, pos, ax=ax, node_color=colors, node_size=25)
+        ax.set_title(name, fontsize=10)
+        ax.axis("off")
+    ax = fig.add_subplot(1, 3, 3)
+    sns.heatmap(nmi, annot=True, fmt=".2f", cmap="viridis", vmin=0, vmax=1, ax=ax, cbar=False)
+    ax.set_title("NMI between partitions")
+    save(fig, "fig7_theme_networks.png")
