@@ -1,8 +1,8 @@
-"""Step 1: load and encode the survey answers."""
+"""Step 1: load, clean and encode the survey answers."""
 import numpy as np
 import pandas as pd
 
-from config import DATA_FILE, LIKERT_MAP
+from config import DATA_FILE, LIKERT_MAP, MIN_ANSWERED_SHARE
 
 
 def load_raw():
@@ -32,3 +32,26 @@ def question_text(raw):
     for c in raw.columns:
         texts[short_id(c)] = c.split(".", 1)[1].strip()
     return texts
+
+
+def prepare():
+    # Full cleaning step; returns everything later stages need
+    raw = load_raw()
+    numeric = encode(raw)
+    texts = question_text(raw)
+    n_q = numeric.shape[1]
+    answered = numeric.notna().sum(axis=1)
+    keep = answered >= MIN_ANSWERED_SHARE * n_q
+    report = {
+        "n_raw": int(len(numeric)),
+        "n_questions": int(n_q),
+        "n_empty": int((answered == 0).sum()),
+        "n_dropped": int((~keep).sum()),
+        "n_kept": int(keep.sum()),
+        "n_no_comments": int((raw == NO_OPINION).sum().sum()),
+        "n_blank": int(raw.isna().sum().sum()),
+    }
+    clean = numeric[keep]
+    flags = quality_flags(raw[keep], clean)
+    report["n_flagged"] = int(flags["flagged"].sum())
+    return raw, clean, texts, flags, report
