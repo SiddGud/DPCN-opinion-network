@@ -1,8 +1,8 @@
-"""Step 1: load, clean and encode the survey answers."""
+"""Step 1: load, clean and encode the survey; flag possible low-effort responses."""
 import numpy as np
 import pandas as pd
 
-from config import DATA_FILE, LIKERT_MAP, MIN_ANSWERED_SHARE
+from config import DATA_FILE, LIKERT_MAP, NO_OPINION, MIN_ANSWERED_SHARE
 
 
 def load_raw():
@@ -32,6 +32,55 @@ def question_text(raw):
     for c in raw.columns:
         texts[short_id(c)] = c.split(".", 1)[1].strip()
     return texts
+
+
+def longest_run(values):
+    # Length of the longest streak of identical consecutive non-missing answers
+    best = 0
+    current = 0
+    previous = None
+    for v in values:
+        if pd.isna(v):
+            current = 0
+            previous = None
+            continue
+        if v == previous:
+            current += 1
+        else:
+            current = 1
+        previous = v
+        best = max(best, current)
+    return best
+
+
+def quality_flags(raw, numeric):
+    # Build several independent low-effort indicators per respondent
+    rows = []
+    for rid in numeric.index:
+        answers = numeric.loc[rid]
+        text_answers = raw.loc[rid]
+        # Share of "Neutral" + "No Comments" among given answers
+        middle = (text_answers == "Neutral").sum() + (text_answers == NO_OPINION).sum()
+        middle_share = middle / max(text_answers.notna().sum(), 1)
+        # Contradiction: agreeing that projects beat exams AND that exams measure knowledge well
+        contradiction = bool(answers.get("E01", 0) >= 1 and answers.get("E02", 0) >= 1)
+        rows.append({
+            "respondent": rid,
+            "answered": int(answers.notna().sum()),
+            "longest_run": longest_run(text_answers.tolist()),
+            "middle_share": round(float(middle_share), 3),
+            "person_sd": round(float(answers.std()), 3),
+            "contradiction_E01_E02": contradiction,
+        })
+    flags = pd.DataFrame(rows).set_index("respondent")
+    # Each indicator adds one point; two or more points = flagged (flagged people are NOT deleted)
+    score = (flags["longest_run"] >= 20).astype(int)
+    score += (flags["middle_share"] > 0.4).astype(int)
+    score += flags["contradiction_E01_E02"].astype(int)
+    score += (flags["person_sd"] < 0.5).astype(int)
+    flags["flag_score"] = score
+    flags["flagged"] = score >= 2
+    return flags
 
 
 def prepare():
